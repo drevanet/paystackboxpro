@@ -1,7 +1,7 @@
 "use client";
 
-import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls } from "@react-three/drei";
 import { useEffect, useState } from "react";
 import * as THREE from "three";
 
@@ -14,96 +14,224 @@ export type FaceImages = {
   bottom: string | null;
 };
 
-type FaceProps = {
-  image: string | null;
-  position: [number, number, number];
-  rotation: [number, number, number];
-  width: number;
-  height: number;
+type BoxSceneProps = {
+  images: FaceImages;
+  scale: number;
+  background: string;
 };
 
-function ArtworkFace({
-  image,
-  position,
-  rotation,
-  width,
-  height,
-}: FaceProps) {
-  const [texture, setTexture] = useState<THREE.Texture | null>(
-    null
-  );
+const WIDTH = 2.8;
+const HEIGHT = 3.6;
+const DEPTH = 1.35;
+
+/*
+ * Load one image into one Three.js texture.
+ */
+function loadImageTexture(
+  src: string | null
+): Promise<THREE.Texture | null> {
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
+    }
+
+    const image = new Image();
+
+    image.onload = () => {
+      const texture = new THREE.Texture(image);
+
+      texture.colorSpace =
+        THREE.SRGBColorSpace;
+
+      texture.minFilter =
+        THREE.LinearFilter;
+
+      texture.magFilter =
+        THREE.LinearFilter;
+
+      texture.wrapS =
+        THREE.ClampToEdgeWrapping;
+
+      texture.wrapT =
+        THREE.ClampToEdgeWrapping;
+
+      texture.generateMipmaps = false;
+
+      texture.needsUpdate = true;
+
+      resolve(texture);
+    };
+
+    image.onerror = (error) => {
+      console.error(
+        "Could not load face image:",
+        error
+      );
+
+      resolve(null);
+    };
+
+    image.src = src;
+  });
+}
+
+/*
+ * Creates one material for every face.
+ *
+ * IMPORTANT:
+ *
+ * BoxGeometry material indexes:
+ *
+ * 0 = right
+ * 1 = left
+ * 2 = top
+ * 3 = bottom
+ * 4 = front
+ * 5 = back
+ */
+function useBoxMaterials(images: FaceImages) {
+  const [materials, setMaterials] =
+    useState<
+      THREE.MeshStandardMaterial[] | null
+    >(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    setTexture(null);
+    async function createMaterials() {
+      /*
+       * Load each face independently.
+       */
+      const [
+        rightTexture,
+        leftTexture,
+        topTexture,
+        bottomTexture,
+        frontTexture,
+        backTexture,
+      ] = await Promise.all([
+        loadImageTexture(images.right),
+        loadImageTexture(images.left),
+        loadImageTexture(images.top),
+        loadImageTexture(images.bottom),
+        loadImageTexture(images.front),
+        loadImageTexture(images.back),
+      ]);
 
-    if (!image) {
-      return;
+      if (cancelled) {
+        [
+          rightTexture,
+          leftTexture,
+          topTexture,
+          bottomTexture,
+          frontTexture,
+          backTexture,
+        ].forEach((texture) => {
+          texture?.dispose();
+        });
+
+        return;
+      }
+
+      /*
+       * Create SIX completely independent materials.
+       */
+      const nextMaterials = [
+        new THREE.MeshStandardMaterial({
+          map: rightTexture ?? undefined,
+          color: rightTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+
+        new THREE.MeshStandardMaterial({
+          map: leftTexture ?? undefined,
+          color: leftTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+
+        new THREE.MeshStandardMaterial({
+          map: topTexture ?? undefined,
+          color: topTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+
+        new THREE.MeshStandardMaterial({
+          map: bottomTexture ?? undefined,
+          color: bottomTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+
+        new THREE.MeshStandardMaterial({
+          map: frontTexture ?? undefined,
+          color: frontTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+
+        new THREE.MeshStandardMaterial({
+          map: backTexture ?? undefined,
+          color: backTexture
+            ? "#ffffff"
+            : "#d5d9df",
+          roughness: 0.55,
+          metalness: 0,
+        }),
+      ];
+
+      /*
+       * Make sure textures are ready.
+       */
+      nextMaterials.forEach((material) => {
+        material.needsUpdate = true;
+      });
+
+      setMaterials(nextMaterials);
     }
 
-    const loader = new THREE.TextureLoader();
-
-    loader.load(
-      image,
-      (loadedTexture) => {
-        if (cancelled) {
-          loadedTexture.dispose();
-          return;
-        }
-
-        loadedTexture.colorSpace = THREE.SRGBColorSpace;
-
-        loadedTexture.wrapS =
-          THREE.ClampToEdgeWrapping;
-
-        loadedTexture.wrapT =
-          THREE.ClampToEdgeWrapping;
-
-        loadedTexture.minFilter =
-          THREE.LinearFilter;
-
-        loadedTexture.magFilter =
-          THREE.LinearFilter;
-
-        loadedTexture.anisotropy = 8;
-        loadedTexture.needsUpdate = true;
-
-        setTexture(loadedTexture);
-      },
-      undefined,
-      (error) => {
-        if (!cancelled) {
-          console.error(
-            "Artwork texture failed to load:",
-            error
-          );
-        }
-      }
-    );
+    createMaterials();
 
     return () => {
       cancelled = true;
     };
-  }, [image]);
+  }, [
+    images.front,
+    images.back,
+    images.left,
+    images.right,
+    images.top,
+    images.bottom,
+  ]);
 
-  return (
-    <mesh
-      position={position}
-      rotation={rotation}
-      renderOrder={10}
-    >
-      <planeGeometry args={[width, height]} />
+  /*
+   * Dispose old materials/textures.
+   */
+  useEffect(() => {
+    return () => {
+      if (!materials) return;
 
-      <meshBasicMaterial
-        map={texture || undefined}
-        color={texture ? "#ffffff" : "#d1d5db"}
-        side={THREE.DoubleSide}
-        transparent={false}
-        toneMapped={false}
-      />
-    </mesh>
-  );
+      materials.forEach((material) => {
+        material.map?.dispose();
+        material.dispose();
+      });
+    };
+  }, [materials]);
+
+  return materials;
 }
 
 function Box({
@@ -113,123 +241,97 @@ function Box({
   images: FaceImages;
   scale: number;
 }) {
-  const width = 2.8;
-  const height = 3.6;
-  const depth = 1.35;
+  const materials =
+    useBoxMaterials(images);
 
-  const x = width / 2;
-  const y = height / 2;
-  const z = depth / 2;
-
-  const offset = 0.02;
-
-  return (
-    <group
-      scale={[scale, scale, scale]}
-      rotation={[0, -0.42, 0]}
-    >
-      {/* Main box */}
-
-      <mesh castShadow receiveShadow>
+  if (!materials) {
+    return (
+      <mesh
+        scale={[
+          scale,
+          scale,
+          scale,
+        ]}
+        rotation={[
+          0,
+          -0.42,
+          0,
+        ]}
+      >
         <boxGeometry
-          args={[width, height, depth]}
+          args={[
+            WIDTH,
+            HEIGHT,
+            DEPTH,
+          ]}
         />
 
         <meshStandardMaterial
-          color="#e5e7eb"
+          color="#d5d9df"
           roughness={0.55}
-          metalness={0}
         />
       </mesh>
+    );
+  }
 
-      {/* FRONT */}
-
-      <ArtworkFace
-        image={images.front}
-        position={[0, 0, z + offset]}
-        rotation={[0, 0, 0]}
-        width={width}
-        height={height}
+  return (
+    <mesh
+      scale={[
+        scale,
+        scale,
+        scale,
+      ]}
+      rotation={[
+        0,
+        -0.42,
+        0,
+      ]}
+      castShadow
+      receiveShadow
+      material={materials}
+    >
+      <boxGeometry
+        args={[
+          WIDTH,
+          HEIGHT,
+          DEPTH,
+        ]}
       />
-
-      {/* BACK */}
-
-      <ArtworkFace
-        image={images.back}
-        position={[0, 0, -z - offset]}
-        rotation={[0, Math.PI, 0]}
-        width={width}
-        height={height}
-      />
-
-      {/* RIGHT */}
-
-      <ArtworkFace
-        image={images.right}
-        position={[x + offset, 0, 0]}
-        rotation={[0, Math.PI / 2, 0]}
-        width={depth}
-        height={height}
-      />
-
-      {/* LEFT */}
-
-      <ArtworkFace
-        image={images.left}
-        position={[-x - offset, 0, 0]}
-        rotation={[0, -Math.PI / 2, 0]}
-        width={depth}
-        height={height}
-      />
-
-      {/* TOP */}
-
-      <ArtworkFace
-        image={images.top}
-        position={[0, y + offset, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        width={width}
-        height={depth}
-      />
-
-      {/* BOTTOM */}
-
-      <ArtworkFace
-        image={images.bottom}
-        position={[0, -y - offset, 0]}
-        rotation={[Math.PI / 2, 0, 0]}
-        width={width}
-        height={depth}
-      />
-    </group>
+    </mesh>
   );
 }
 
 function Scene({
   images,
   scale,
-}: {
-  images: FaceImages;
-  scale: number;
-}) {
-  const { gl } = useThree();
-
-  useEffect(() => {
-    gl.setClearColor("#111827", 1);
-  }, [gl]);
-
+  background,
+}: BoxSceneProps) {
   return (
     <>
-      <ambientLight intensity={1.8} />
+      <color
+        attach="background"
+        args={[background]}
+      />
 
-      <directionalLight
-        position={[5, 8, 6]}
-        intensity={2.5}
-        castShadow
+      <ambientLight
+        intensity={1.8}
       />
 
       <directionalLight
-        position={[-5, 3, -4]}
+        position={[
+          5,
+          7,
+          6,
+        ]}
+        intensity={2.5}
+      />
+
+      <directionalLight
+        position={[
+          -5,
+          4,
+          -4,
+        ]}
         intensity={1.2}
       />
 
@@ -238,14 +340,17 @@ function Scene({
         scale={scale}
       />
 
-      <Environment preset="studio" />
-
       <OrbitControls
         enablePan={false}
-        enableDamping
-        dampingFactor={0.08}
+        enableZoom={true}
+        enableRotate={true}
         minDistance={4}
         maxDistance={10}
+        target={[
+          0,
+          0,
+          0,
+        ]}
       />
     </>
   );
@@ -254,26 +359,28 @@ function Scene({
 export default function BoxScene({
   images,
   scale,
-}: {
-  images: FaceImages;
-  scale: number;
-}) {
+  background,
+}: BoxSceneProps) {
   return (
     <Canvas
-      shadows
-      gl={{
-        preserveDrawingBuffer: true,
-        antialias: true,
-      }}
       camera={{
-        position: [5, 3.5, 5],
+        position: [
+          5,
+          4,
+          6,
+        ],
         fov: 42,
       }}
-      className="h-full w-full"
+      gl={{
+        antialias: true,
+        preserveDrawingBuffer: true,
+      }}
+      dpr={[1, 2]}
     >
       <Scene
         images={images}
         scale={scale}
+        background={background}
       />
     </Canvas>
   );

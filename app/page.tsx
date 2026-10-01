@@ -14,7 +14,7 @@ export default function Home() {
               Upload artwork to every face, rotate your box in real time, choose a background, save projects, and export a PNG.
             </p>
             <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link href="/signup" className="rounded-xl bg-white px-6 py-3 font-bold text-slate-950">Start creating</Link>
+              <Link href="/editor" className="rounded-xl bg-white px-6 py-3 font-bold text-slate-950">Start creating</Link>
               <Link href="/pricing" className="rounded-xl border border-white/10 px-6 py-3 font-semibold">View plans</Link>
             </div>
           </div>
